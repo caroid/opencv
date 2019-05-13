@@ -73,11 +73,18 @@ GMat dilate3x3(const GMat& src, int iterations,
     return dilate(src, cv::Mat(), cv::Point(-1,-1), iterations, borderType, borderValue);
 }
 
-GMat sobel(const GMat& src, int ddepth, int dx, int dy, int ksize,
+GMat Sobel(const GMat& src, int ddepth, int dx, int dy, int ksize,
            double scale, double delta,
            int borderType, const Scalar& bordVal)
 {
     return imgproc::GSobel::on(src, ddepth, dx, dy, ksize, scale, delta, borderType, bordVal);
+}
+
+std::tuple<GMat, GMat> SobelXY(const GMat& src, int ddepth, int order, int ksize,
+           double scale, double delta,
+           int borderType, const Scalar& bordVal)
+{
+    return imgproc::GSobelXY::on(src, ddepth, order, ksize, scale, delta, borderType, bordVal);
 }
 
 GMat equalizeHist(const GMat& src)
@@ -133,6 +140,16 @@ GMat YUV2BGR(const GMat& src)
 GMat YUV2RGB(const GMat& src)
 {
     return imgproc::GYUV2RGB::on(src);
+}
+
+GMat NV12toRGB(const GMat& src_y, const GMat& src_uv)
+{
+    return imgproc::GNV12toRGB::on(src_y, src_uv);
+}
+
+GMat NV12toBGR(const GMat& src_y, const GMat& src_uv)
+{
+    return imgproc::GNV12toBGR::on(src_y, src_uv);
 }
 
 GMat RGB2Lab(const GMat& src)

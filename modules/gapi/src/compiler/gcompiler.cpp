@@ -21,7 +21,7 @@
 #include "api/gnode_priv.hpp"   // FIXME: why it is here?
 #include "api/gproto_priv.hpp"  // FIXME: why it is here?
 #include "api/gcall_priv.hpp"   // FIXME: why it is here?
-#include "api/gapi_priv.hpp"    // FIXME: why it is here?
+
 #include "api/gbackend_priv.hpp" // Backend basic API (newInstance, etc)
 
 #include "compiler/gmodel.hpp"
@@ -104,14 +104,16 @@ cv::gimpl::GCompiler::GCompiler(const cv::GComputation &c,
 
     // Remove GCompoundBackend to avoid calling setupBackend() with it in the list
     m_all_kernels.remove(cv::gapi::compound::backend());
-    m_e.addPass("init", "resolve_kernels", std::bind(passes::resolveKernels, _1,
+
+    m_e.addPassStage("kernels");
+    m_e.addPass("kernels", "resolve_kernels", std::bind(passes::resolveKernels, _1,
                                                      std::ref(m_all_kernels), // NB: and not copied here
                                                      lookup_order));
+    m_e.addPass("kernels", "check_islands_content", passes::checkIslandsContent);
 
-    m_e.addPass("init", "check_islands_content", passes::checkIslandsContent);
     m_e.addPassStage("meta");
     m_e.addPass("meta", "initialize",   std::bind(passes::initMeta, _1, std::ref(m_metas)));
-    m_e.addPass("meta", "propagate",    passes::inferMeta);
+    m_e.addPass("meta", "propagate",    std::bind(passes::inferMeta, _1, false));
     m_e.addPass("meta", "finalize",     passes::storeResultingMeta);
     // moved to another stage, FIXME: two dumps?
     //    m_e.addPass("meta", "dump_dot",     passes::dumpDotStdout);
@@ -154,6 +156,7 @@ void cv::gimpl::GCompiler::validateInputMeta()
         {
         // FIXME: Auto-generate methods like this from traits:
         case GProtoArg::index_of<cv::GMat>():
+        case GProtoArg::index_of<cv::GMatP>():
             return util::holds_alternative<cv::GMatDesc>(meta);
 
         case GProtoArg::index_of<cv::GScalar>():

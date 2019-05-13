@@ -17,8 +17,7 @@
 #include "opencv2/gapi/gproto.hpp"
 #include "opencv2/gapi/cpu/gcpukernel.hpp"
 
-
-#include "api/gapi_priv.hpp"
+#include "api/gorigin.hpp"
 #include "backends/common/gbackend.hpp"
 #include "compiler/gislandmodel.hpp"
 
@@ -53,6 +52,15 @@ class GCPUExecutable final: public GIslandExecutable
 public:
     GCPUExecutable(const ade::Graph                   &graph,
                    const std::vector<ade::NodeHandle> &nodes);
+
+    virtual inline bool canReshape() const override { return false; }
+    virtual inline void reshape(ade::Graph&, const GCompileArgs&) override
+    {
+        // FIXME: CPU plugin is in fact reshapeable (as it was initially,
+        // even before outMeta() has been introduced), so this limitation
+        // should be dropped.
+        util::throw_error(std::logic_error("GCPUExecutable::reshape() should never be called"));
+    }
 
     virtual void run(std::vector<InObj>  &&input_objs,
                      std::vector<OutObj> &&output_objs) override;

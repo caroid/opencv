@@ -118,9 +118,10 @@ v = f_y*y'' + c_y
 tangential distortion coefficients. \f$s_1\f$, \f$s_2\f$, \f$s_3\f$, and \f$s_4\f$, are the thin prism distortion
 coefficients. Higher-order coefficients are not considered in OpenCV.
 
-The next figure shows two common types of radial distortion: barrel distortion (typically \f$ k_1 > 0 \f$) and pincushion distortion (typically \f$ k_1 < 0 \f$).
+The next figures show two common types of radial distortion: barrel distortion (typically \f$ k_1 < 0 \f$) and pincushion distortion (typically \f$ k_1 > 0 \f$).
 
 ![](pics/distortion_examples.png)
+![](pics/distortion_examples2.png)
 
 In some cases the image sensor may be tilted in order to focus an oblique plane in front of the
 camera (Scheimpfug condition). This can be useful for particle image velocimetry (PIV) or
@@ -170,14 +171,12 @@ pattern (every view is described by several 3D-2D point correspondences).
 *rectification* transformation that makes the camera optical axes parallel.
 
 @note
-   -   A calibration sample for 3 cameras in horizontal position can be found at
+    -   A calibration sample for 3 cameras in horizontal position can be found at
         opencv_source_code/samples/cpp/3calibration.cpp
     -   A calibration sample based on a sequence of images can be found at
         opencv_source_code/samples/cpp/calibration.cpp
     -   A calibration sample in order to do 3D reconstruction can be found at
         opencv_source_code/samples/cpp/build3dmodel.cpp
-    -   A calibration sample of an artificially generated camera and chessboard patterns can be
-        found at opencv_source_code/samples/cpp/calibration_artificial.cpp
     -   A calibration example on stereo calibration can be found at
         opencv_source_code/samples/cpp/stereo_calib.cpp
     -   A calibration example on stereo matching can be found at
@@ -254,7 +253,8 @@ enum { CALIB_CB_SYMMETRIC_GRID  = 1,
        CALIB_CB_CLUSTERING      = 4
      };
 
-enum { CALIB_USE_INTRINSIC_GUESS = 0x00001,
+enum { CALIB_NINTRINSIC          = 18,
+       CALIB_USE_INTRINSIC_GUESS = 0x00001,
        CALIB_FIX_ASPECT_RATIO    = 0x00002,
        CALIB_FIX_PRINCIPAL_POINT = 0x00004,
        CALIB_ZERO_TANGENT_DIST   = 0x00008,
@@ -278,7 +278,7 @@ enum { CALIB_USE_INTRINSIC_GUESS = 0x00001,
        // for stereo rectification
        CALIB_ZERO_DISPARITY      = 0x00400,
        CALIB_USE_LU              = (1 << 17), //!< use LU instead of SVD decomposition for solving. much faster but potentially less precise
-       CALIB_USE_EXTRINSIC_GUESS = (1 << 22), //!< for stereoCalibrate
+       CALIB_USE_EXTRINSIC_GUESS = (1 << 22)  //!< for stereoCalibrate
      };
 
 //! the algorithm for finding fundamental matrix
@@ -288,6 +288,14 @@ enum { FM_7POINT = 1, //!< 7-point algorithm
        FM_RANSAC = 8  //!< RANSAC algorithm. It needs at least 15 points. 7-point algorithm is used.
      };
 
+enum HandEyeCalibrationMethod
+{
+    CALIB_HAND_EYE_TSAI         = 0, //!< A New Technique for Fully Autonomous and Efficient 3D Robotics Hand/Eye Calibration @cite Tsai89
+    CALIB_HAND_EYE_PARK         = 1, //!< Robot Sensor Calibration: Solving AX = XB on the Euclidean Group @cite Park94
+    CALIB_HAND_EYE_HORAUD       = 2, //!< Hand-eye Calibration @cite Horaud95
+    CALIB_HAND_EYE_ANDREFF      = 3, //!< On-line Hand-Eye Calibration @cite Andreff99
+    CALIB_HAND_EYE_DANIILIDIS   = 4  //!< Hand-Eye Calibration Using Dual Quaternions @cite Daniilidis98
+};
 
 
 /** @brief Converts a rotation matrix to a rotation vector or vice versa.
@@ -314,6 +322,71 @@ An example program about pose estimation from coplanar points
 
 Check @ref tutorial_homography "the corresponding tutorial" for more details
 */
+
+/** Levenberg-Marquardt solver. Starting with the specified vector of parameters it
+    optimizes the target vector criteria "err"
+    (finds local minima of each target vector component absolute value).
+
+    When needed, it calls user-provided callback.
+*/
+class CV_EXPORTS LMSolver : public Algorithm
+{
+public:
+    class CV_EXPORTS Callback
+    {
+    public:
+        virtual ~Callback() {}
+        /**
+         computes error and Jacobian for the specified vector of parameters
+
+         @param param the current vector of parameters
+         @param err output vector of errors: err_i = actual_f_i - ideal_f_i
+         @param J output Jacobian: J_ij = d(err_i)/d(param_j)
+
+         when J=noArray(), it means that it does not need to be computed.
+         Dimensionality of error vector and param vector can be different.
+         The callback should explicitly allocate (with "create" method) each output array
+         (unless it's noArray()).
+        */
+        virtual bool compute(InputArray param, OutputArray err, OutputArray J) const = 0;
+    };
+
+    /**
+       Runs Levenberg-Marquardt algorithm using the passed vector of parameters as the start point.
+       The final vector of parameters (whether the algorithm converged or not) is stored at the same
+       vector. The method returns the number of iterations used. If it's equal to the previously specified
+       maxIters, there is a big chance the algorithm did not converge.
+
+       @param param initial/final vector of parameters.
+
+       Note that the dimensionality of parameter space is defined by the size of param vector,
+       and the dimensionality of optimized criteria is defined by the size of err vector
+       computed by the callback.
+    */
+    virtual int run(InputOutputArray param) const = 0;
+
+    /**
+       Sets the maximum number of iterations
+       @param maxIters the number of iterations
+    */
+    virtual void setMaxIters(int maxIters) = 0;
+    /**
+       Retrieves the current maximum number of iterations
+    */
+    virtual int getMaxIters() const = 0;
+
+    /**
+       Creates Levenberg-Marquard solver
+
+       @param cb callback
+       @param maxIters maximum number of iterations that can be further
+         modified using setMaxIters() method.
+    */
+    static Ptr<LMSolver> create(const Ptr<LMSolver::Callback>& cb, int maxIters);
+    static Ptr<LMSolver> create(const Ptr<LMSolver::Callback>& cb, int maxIters, double eps);
+};
+
+
 
 /** @brief Finds a perspective transformation between two planes.
 
@@ -772,6 +845,65 @@ CV_EXPORTS_W int solveP3P( InputArray objectPoints, InputArray imagePoints,
                            OutputArrayOfArrays rvecs, OutputArrayOfArrays tvecs,
                            int flags );
 
+/** @brief Refine a pose (the translation and the rotation that transform a 3D point expressed in the object coordinate frame
+to the camera coordinate frame) from a 3D-2D point correspondences and starting from an initial solution.
+
+@param objectPoints Array of object points in the object coordinate space, Nx3 1-channel or 1xN/Nx1 3-channel,
+where N is the number of points. vector\<Point3f\> can also be passed here.
+@param imagePoints Array of corresponding image points, Nx2 1-channel or 1xN/Nx1 2-channel,
+where N is the number of points. vector\<Point2f\> can also be passed here.
+@param cameraMatrix Input camera matrix \f$A = \vecthreethree{fx}{0}{cx}{0}{fy}{cy}{0}{0}{1}\f$ .
+@param distCoeffs Input vector of distortion coefficients
+\f$(k_1, k_2, p_1, p_2[, k_3[, k_4, k_5, k_6 [, s_1, s_2, s_3, s_4[, \tau_x, \tau_y]]]])\f$ of
+4, 5, 8, 12 or 14 elements. If the vector is NULL/empty, the zero distortion coefficients are
+assumed.
+@param rvec Input/Output rotation vector (see @ref Rodrigues ) that, together with tvec , brings points from
+the model coordinate system to the camera coordinate system. Input values are used as an initial solution.
+@param tvec Input/Output translation vector. Input values are used as an initial solution.
+@param criteria Criteria when to stop the Levenberg-Marquard iterative algorithm.
+
+The function refines the object pose given at least 3 object points, their corresponding image
+projections, an initial solution for the rotation and translation vector,
+as well as the camera matrix and the distortion coefficients.
+The function minimizes the projection error with respect to the rotation and the translation vectors, according
+to a Levenberg-Marquardt iterative minimization @cite Madsen04 @cite Eade13 process.
+ */
+CV_EXPORTS_W void solvePnPRefineLM( InputArray objectPoints, InputArray imagePoints,
+                                    InputArray cameraMatrix, InputArray distCoeffs,
+                                    InputOutputArray rvec, InputOutputArray tvec,
+                                    TermCriteria criteria = TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 20, FLT_EPSILON));
+
+/** @brief Refine a pose (the translation and the rotation that transform a 3D point expressed in the object coordinate frame
+to the camera coordinate frame) from a 3D-2D point correspondences and starting from an initial solution.
+
+@param objectPoints Array of object points in the object coordinate space, Nx3 1-channel or 1xN/Nx1 3-channel,
+where N is the number of points. vector\<Point3f\> can also be passed here.
+@param imagePoints Array of corresponding image points, Nx2 1-channel or 1xN/Nx1 2-channel,
+where N is the number of points. vector\<Point2f\> can also be passed here.
+@param cameraMatrix Input camera matrix \f$A = \vecthreethree{fx}{0}{cx}{0}{fy}{cy}{0}{0}{1}\f$ .
+@param distCoeffs Input vector of distortion coefficients
+\f$(k_1, k_2, p_1, p_2[, k_3[, k_4, k_5, k_6 [, s_1, s_2, s_3, s_4[, \tau_x, \tau_y]]]])\f$ of
+4, 5, 8, 12 or 14 elements. If the vector is NULL/empty, the zero distortion coefficients are
+assumed.
+@param rvec Input/Output rotation vector (see @ref Rodrigues ) that, together with tvec , brings points from
+the model coordinate system to the camera coordinate system. Input values are used as an initial solution.
+@param tvec Input/Output translation vector. Input values are used as an initial solution.
+@param criteria Criteria when to stop the Levenberg-Marquard iterative algorithm.
+@param VVSlambda Gain for the virtual visual servoing control law, equivalent to the \f$\alpha\f$
+gain in the Gauss-Newton formulation.
+
+The function refines the object pose given at least 3 object points, their corresponding image
+projections, an initial solution for the rotation and translation vector,
+as well as the camera matrix and the distortion coefficients.
+The function minimizes the projection error with respect to the rotation and the translation vectors, using a
+virtual visual servoing (VVS) @cite Chaumette06 @cite Marchand16 scheme.
+ */
+CV_EXPORTS_W void solvePnPRefineVVS( InputArray objectPoints, InputArray imagePoints,
+                                     InputArray cameraMatrix, InputArray distCoeffs,
+                                     InputOutputArray rvec, InputOutputArray tvec,
+                                     TermCriteria criteria = TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 20, FLT_EPSILON),
+                                     double VVSlambda = 1);
+
 /** @brief Finds an initial camera matrix from 3D-2D point correspondences.
 
 @param objectPoints Vector of vectors of the calibration pattern points in the calibration pattern
@@ -843,6 +975,12 @@ square grouping and ordering algorithm fails.
 CV_EXPORTS_W bool findChessboardCorners( InputArray image, Size patternSize, OutputArray corners,
                                          int flags = CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE );
 
+/*
+   Checks whether the image contains chessboard of the specific size or not.
+   If yes, nonzero value is returned.
+*/
+CV_EXPORTS_W bool checkChessboard(InputArray img, Size size);
+
 /** @brief Finds the positions of internal corners of the chessboard using a sector based approach.
 
 @param image Source chessboard view. It must be an 8-bit grayscale or color image.
@@ -876,7 +1014,7 @@ can be used as well.
 CV_EXPORTS_W bool findChessboardCornersSB(InputArray image,Size patternSize, OutputArray corners,int flags=0);
 
 //! finds subpixel-accurate positions of the chessboard corners
-CV_EXPORTS bool find4QuadCornerSubpix( InputArray img, InputOutputArray corners, Size region_size );
+CV_EXPORTS_W bool find4QuadCornerSubpix( InputArray img, InputOutputArray corners, Size region_size );
 
 /** @brief Renders the detected chessboard corners.
 
@@ -892,6 +1030,26 @@ found, or as colored corners connected with lines if the board was found.
  */
 CV_EXPORTS_W void drawChessboardCorners( InputOutputArray image, Size patternSize,
                                          InputArray corners, bool patternWasFound );
+
+/** @brief Draw axes of the world/object coordinate system from pose estimation. @sa solvePnP
+
+@param image Input/output image. It must have 1 or 3 channels. The number of channels is not altered.
+@param cameraMatrix Input 3x3 floating-point matrix of camera intrinsic parameters.
+\f$A = \vecthreethree{f_x}{0}{c_x}{0}{f_y}{c_y}{0}{0}{1}\f$
+@param distCoeffs Input vector of distortion coefficients
+\f$(k_1, k_2, p_1, p_2[, k_3[, k_4, k_5, k_6 [, s_1, s_2, s_3, s_4[, \tau_x, \tau_y]]]])\f$ of
+4, 5, 8, 12 or 14 elements. If the vector is empty, the zero distortion coefficients are assumed.
+@param rvec Rotation vector (see @ref Rodrigues ) that, together with tvec , brings points from
+the model coordinate system to the camera coordinate system.
+@param tvec Translation vector.
+@param length Length of the painted axes in the same unit than tvec (usually in meters).
+@param thickness Line thickness of the painted axes.
+
+This function draws the axes of the world/object coordinate system w.r.t. to the camera frame.
+OX is drawn in red, OY in green and OZ in blue.
+ */
+CV_EXPORTS_W void drawFrameAxes(InputOutputArray image, InputArray cameraMatrix, InputArray distCoeffs,
+                                InputArray rvec, InputArray tvec, float length, int thickness=3);
 
 struct CV_EXPORTS_W_SIMPLE CirclesGridFinderParameters
 {
@@ -1077,7 +1235,7 @@ The algorithm performs the following steps:
     patternSize=cvSize(cols,rows) in findChessboardCorners .
 
 @sa
-   findChessboardCorners, solvePnP, initCameraMatrix2D, stereoCalibrate, undistort
+   calibrateCameraRO, findChessboardCorners, solvePnP, initCameraMatrix2D, stereoCalibrate, undistort
  */
 CV_EXPORTS_AS(calibrateCameraExtended) double calibrateCamera( InputArrayOfArrays objectPoints,
                                      InputArrayOfArrays imagePoints, Size imageSize,
@@ -1089,18 +1247,89 @@ CV_EXPORTS_AS(calibrateCameraExtended) double calibrateCamera( InputArrayOfArray
                                      int flags = 0, TermCriteria criteria = TermCriteria(
                                         TermCriteria::COUNT + TermCriteria::EPS, 30, DBL_EPSILON) );
 
-/** @overload double calibrateCamera( InputArrayOfArrays objectPoints,
-                                     InputArrayOfArrays imagePoints, Size imageSize,
-                                     InputOutputArray cameraMatrix, InputOutputArray distCoeffs,
-                                     OutputArrayOfArrays rvecs, OutputArrayOfArrays tvecs,
-                                     OutputArray stdDeviations, OutputArray perViewErrors,
-                                     int flags = 0, TermCriteria criteria = TermCriteria(
-                                        TermCriteria::COUNT + TermCriteria::EPS, 30, DBL_EPSILON) )
- */
+/** @overload */
 CV_EXPORTS_W double calibrateCamera( InputArrayOfArrays objectPoints,
                                      InputArrayOfArrays imagePoints, Size imageSize,
                                      InputOutputArray cameraMatrix, InputOutputArray distCoeffs,
                                      OutputArrayOfArrays rvecs, OutputArrayOfArrays tvecs,
+                                     int flags = 0, TermCriteria criteria = TermCriteria(
+                                        TermCriteria::COUNT + TermCriteria::EPS, 30, DBL_EPSILON) );
+
+/** @brief Finds the camera intrinsic and extrinsic parameters from several views of a calibration pattern.
+
+This function is an extension of calibrateCamera() with the method of releasing object which was
+proposed in @cite strobl2011iccv. In many common cases with inaccurate, unmeasured, roughly planar
+targets (calibration plates), this method can dramatically improve the precision of the estimated
+camera parameters. Both the object-releasing method and standard method are supported by this
+function. Use the parameter **iFixedPoint** for method selection. In the internal implementation,
+calibrateCamera() is a wrapper for this function.
+
+@param objectPoints Vector of vectors of calibration pattern points in the calibration pattern
+coordinate space. See calibrateCamera() for details. If the method of releasing object to be used,
+the identical calibration board must be used in each view and it must be fully visible, and all
+objectPoints[i] must be the same and all points should be roughly close to a plane. **The calibration
+target has to be rigid, or at least static if the camera (rather than the calibration target) is
+shifted for grabbing images.**
+@param imagePoints Vector of vectors of the projections of calibration pattern points. See
+calibrateCamera() for details.
+@param imageSize Size of the image used only to initialize the intrinsic camera matrix.
+@param iFixedPoint The index of the 3D object point in objectPoints[0] to be fixed. It also acts as
+a switch for calibration method selection. If object-releasing method to be used, pass in the
+parameter in the range of [1, objectPoints[0].size()-2], otherwise a value out of this range will
+make standard calibration method selected. Usually the top-right corner point of the calibration
+board grid is recommended to be fixed when object-releasing method being utilized. According to
+\cite strobl2011iccv, two other points are also fixed. In this implementation, objectPoints[0].front
+and objectPoints[0].back.z are used. With object-releasing method, accurate rvecs, tvecs and
+newObjPoints are only possible if coordinates of these three fixed points are accurate enough.
+@param cameraMatrix Output 3x3 floating-point camera matrix. See calibrateCamera() for details.
+@param distCoeffs Output vector of distortion coefficients. See calibrateCamera() for details.
+@param rvecs Output vector of rotation vectors estimated for each pattern view. See calibrateCamera()
+for details.
+@param tvecs Output vector of translation vectors estimated for each pattern view.
+@param newObjPoints The updated output vector of calibration pattern points. The coordinates might
+be scaled based on three fixed points. The returned coordinates are accurate only if the above
+mentioned three fixed points are accurate. If not needed, noArray() can be passed in. This parameter
+is ignored with standard calibration method.
+@param stdDeviationsIntrinsics Output vector of standard deviations estimated for intrinsic parameters.
+See calibrateCamera() for details.
+@param stdDeviationsExtrinsics Output vector of standard deviations estimated for extrinsic parameters.
+See calibrateCamera() for details.
+@param stdDeviationsObjPoints Output vector of standard deviations estimated for refined coordinates
+of calibration pattern points. It has the same size and order as objectPoints[0] vector. This
+parameter is ignored with standard calibration method.
+ @param perViewErrors Output vector of the RMS re-projection error estimated for each pattern view.
+@param flags Different flags that may be zero or a combination of some predefined values. See
+calibrateCamera() for details. If the method of releasing object is used, the calibration time may
+be much longer. CALIB_USE_QR or CALIB_USE_LU could be used for faster calibration with potentially
+less precise and less stable in some rare cases.
+@param criteria Termination criteria for the iterative optimization algorithm.
+
+@return the overall RMS re-projection error.
+
+The function estimates the intrinsic camera parameters and extrinsic parameters for each of the
+views. The algorithm is based on @cite Zhang2000, @cite BouguetMCT and @cite strobl2011iccv. See
+calibrateCamera() for other detailed explanations.
+@sa
+   calibrateCamera, findChessboardCorners, solvePnP, initCameraMatrix2D, stereoCalibrate, undistort
+ */
+CV_EXPORTS_AS(calibrateCameraROExtended) double calibrateCameraRO( InputArrayOfArrays objectPoints,
+                                     InputArrayOfArrays imagePoints, Size imageSize, int iFixedPoint,
+                                     InputOutputArray cameraMatrix, InputOutputArray distCoeffs,
+                                     OutputArrayOfArrays rvecs, OutputArrayOfArrays tvecs,
+                                     OutputArray newObjPoints,
+                                     OutputArray stdDeviationsIntrinsics,
+                                     OutputArray stdDeviationsExtrinsics,
+                                     OutputArray stdDeviationsObjPoints,
+                                     OutputArray perViewErrors,
+                                     int flags = 0, TermCriteria criteria = TermCriteria(
+                                        TermCriteria::COUNT + TermCriteria::EPS, 30, DBL_EPSILON) );
+
+/** @overload */
+CV_EXPORTS_W double calibrateCameraRO( InputArrayOfArrays objectPoints,
+                                     InputArrayOfArrays imagePoints, Size imageSize, int iFixedPoint,
+                                     InputOutputArray cameraMatrix, InputOutputArray distCoeffs,
+                                     OutputArrayOfArrays rvecs, OutputArrayOfArrays tvecs,
+                                     OutputArray newObjPoints,
                                      int flags = 0, TermCriteria criteria = TermCriteria(
                                         TermCriteria::COUNT + TermCriteria::EPS, 30, DBL_EPSILON) );
 
@@ -1407,6 +1636,139 @@ CV_EXPORTS_W Mat getOptimalNewCameraMatrix( InputArray cameraMatrix, InputArray 
                                             Size imageSize, double alpha, Size newImgSize = Size(),
                                             CV_OUT Rect* validPixROI = 0,
                                             bool centerPrincipalPoint = false);
+
+/** @brief Computes Hand-Eye calibration: \f$_{}^{g}\textrm{T}_c\f$
+
+@param[in] R_gripper2base Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the gripper frame to the robot base frame (\f$_{}^{b}\textrm{T}_g\f$).
+This is a vector (`vector<Mat>`) that contains the rotation matrices for all the transformations
+from gripper frame to robot base frame.
+@param[in] t_gripper2base Translation part extracted from the homogeneous matrix that transforms a point
+expressed in the gripper frame to the robot base frame (\f$_{}^{b}\textrm{T}_g\f$).
+This is a vector (`vector<Mat>`) that contains the translation vectors for all the transformations
+from gripper frame to robot base frame.
+@param[in] R_target2cam Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the target frame to the camera frame (\f$_{}^{c}\textrm{T}_t\f$).
+This is a vector (`vector<Mat>`) that contains the rotation matrices for all the transformations
+from calibration target frame to camera frame.
+@param[in] t_target2cam Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the target frame to the camera frame (\f$_{}^{c}\textrm{T}_t\f$).
+This is a vector (`vector<Mat>`) that contains the translation vectors for all the transformations
+from calibration target frame to camera frame.
+@param[out] R_cam2gripper Estimated rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the camera frame to the gripper frame (\f$_{}^{g}\textrm{T}_c\f$).
+@param[out] t_cam2gripper Estimated translation part extracted from the homogeneous matrix that transforms a point
+expressed in the camera frame to the gripper frame (\f$_{}^{g}\textrm{T}_c\f$).
+@param[in] method One of the implemented Hand-Eye calibration method, see cv::HandEyeCalibrationMethod
+
+The function performs the Hand-Eye calibration using various methods. One approach consists in estimating the
+rotation then the translation (separable solutions) and the following methods are implemented:
+  - R. Tsai, R. Lenz A New Technique for Fully Autonomous and Efficient 3D Robotics Hand/EyeCalibration \cite Tsai89
+  - F. Park, B. Martin Robot Sensor Calibration: Solving AX = XB on the Euclidean Group \cite Park94
+  - R. Horaud, F. Dornaika Hand-Eye Calibration \cite Horaud95
+
+Another approach consists in estimating simultaneously the rotation and the translation (simultaneous solutions),
+with the following implemented method:
+  - N. Andreff, R. Horaud, B. Espiau On-line Hand-Eye Calibration \cite Andreff99
+  - K. Daniilidis Hand-Eye Calibration Using Dual Quaternions \cite Daniilidis98
+
+The following picture describes the Hand-Eye calibration problem where the transformation between a camera ("eye")
+mounted on a robot gripper ("hand") has to be estimated.
+
+![](pics/hand-eye_figure.png)
+
+The calibration procedure is the following:
+  - a static calibration pattern is used to estimate the transformation between the target frame
+  and the camera frame
+  - the robot gripper is moved in order to acquire several poses
+  - for each pose, the homogeneous transformation between the gripper frame and the robot base frame is recorded using for
+  instance the robot kinematics
+\f[
+    \begin{bmatrix}
+    X_b\\
+    Y_b\\
+    Z_b\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{b}\textrm{R}_g & _{}^{b}\textrm{t}_g \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_g\\
+    Y_g\\
+    Z_g\\
+    1
+    \end{bmatrix}
+\f]
+  - for each pose, the homogeneous transformation between the calibration target frame and the camera frame is recorded using
+  for instance a pose estimation method (PnP) from 2D-3D point correspondences
+\f[
+    \begin{bmatrix}
+    X_c\\
+    Y_c\\
+    Z_c\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{c}\textrm{R}_t & _{}^{c}\textrm{t}_t \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_t\\
+    Y_t\\
+    Z_t\\
+    1
+    \end{bmatrix}
+\f]
+
+The Hand-Eye calibration procedure returns the following homogeneous transformation
+\f[
+    \begin{bmatrix}
+    X_g\\
+    Y_g\\
+    Z_g\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{g}\textrm{R}_c & _{}^{g}\textrm{t}_c \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_c\\
+    Y_c\\
+    Z_c\\
+    1
+    \end{bmatrix}
+\f]
+
+This problem is also known as solving the \f$\mathbf{A}\mathbf{X}=\mathbf{X}\mathbf{B}\f$ equation:
+\f[
+    \begin{align*}
+    ^{b}{\textrm{T}_g}^{(1)} \hspace{0.2em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(1)} &=
+    \hspace{0.1em} ^{b}{\textrm{T}_g}^{(2)} \hspace{0.2em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(2)} \\
+
+    (^{b}{\textrm{T}_g}^{(2)})^{-1} \hspace{0.2em} ^{b}{\textrm{T}_g}^{(1)} \hspace{0.2em} ^{g}\textrm{T}_c &=
+    \hspace{0.1em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(2)} (^{c}{\textrm{T}_t}^{(1)})^{-1} \\
+
+    \textrm{A}_i \textrm{X} &= \textrm{X} \textrm{B}_i \\
+    \end{align*}
+\f]
+
+\note
+Additional information can be found on this [website](http://campar.in.tum.de/Chair/HandEyeCalibration).
+\note
+A minimum of 2 motions with non parallel rotation axes are necessary to determine the hand-eye transformation.
+So at least 3 different poses are required, but it is strongly recommended to use many more poses.
+
+ */
+CV_EXPORTS_W void calibrateHandEye( InputArrayOfArrays R_gripper2base, InputArrayOfArrays t_gripper2base,
+                                    InputArrayOfArrays R_target2cam, InputArrayOfArrays t_target2cam,
+                                    OutputArray R_cam2gripper, OutputArray t_cam2gripper,
+                                    HandEyeCalibrationMethod method=CALIB_HAND_EYE_TSAI );
 
 /** @brief Converts points from Euclidean to homogeneous space.
 
@@ -2680,5 +3042,45 @@ optimization. It stays at the center or at a different location specified when C
 } // end namespace fisheye
 
 } //end namespace cv
+
+#if 0 //def __cplusplus
+//////////////////////////////////////////////////////////////////////////////////////////
+class CV_EXPORTS CvLevMarq
+{
+public:
+    CvLevMarq();
+    CvLevMarq( int nparams, int nerrs, CvTermCriteria criteria=
+              cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,DBL_EPSILON),
+              bool completeSymmFlag=false );
+    ~CvLevMarq();
+    void init( int nparams, int nerrs, CvTermCriteria criteria=
+              cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,DBL_EPSILON),
+              bool completeSymmFlag=false );
+    bool update( const CvMat*& param, CvMat*& J, CvMat*& err );
+    bool updateAlt( const CvMat*& param, CvMat*& JtJ, CvMat*& JtErr, double*& errNorm );
+
+    void clear();
+    void step();
+    enum { DONE=0, STARTED=1, CALC_J=2, CHECK_ERR=3 };
+
+    cv::Ptr<CvMat> mask;
+    cv::Ptr<CvMat> prevParam;
+    cv::Ptr<CvMat> param;
+    cv::Ptr<CvMat> J;
+    cv::Ptr<CvMat> err;
+    cv::Ptr<CvMat> JtJ;
+    cv::Ptr<CvMat> JtJN;
+    cv::Ptr<CvMat> JtErr;
+    cv::Ptr<CvMat> JtJV;
+    cv::Ptr<CvMat> JtJW;
+    double prevErrNorm, errNorm;
+    int lambdaLg10;
+    CvTermCriteria criteria;
+    int state;
+    int iters;
+    bool completeSymmFlag;
+    int solveMethod;
+};
+#endif
 
 #endif

@@ -13,6 +13,9 @@ void checkIppStatus();
 extern bool skipUnstableTests;
 extern bool runBigDataTests;
 extern int testThreads;
+
+void testSetUp();
+void testTearDown();
 }
 
 // check for required "opencv_test" namespace
@@ -24,13 +27,8 @@ extern int testThreads;
 
 #define CV__TEST_INIT \
     CV__TEST_NAMESPACE_CHECK \
-    fflush(stdout); fflush(stderr); \
-    cv::ipp::setIppStatus(0); \
-    cv::theRNG().state = cvtest::param_seed; \
-    cv::setNumThreads(cvtest::testThreads);
-#define CV__TEST_CLEANUP \
-    fflush(stdout); fflush(stderr); \
-    ::cvtest::checkIppStatus();
+    ::cvtest::testSetUp();
+#define CV__TEST_CLEANUP ::cvtest::testTearDown();
 #define CV__TEST_BODY_IMPL(name) \
     { \
        CV__TRACE_APP_FUNCTION_NAME(name); \
@@ -39,7 +37,7 @@ extern int testThreads;
           Body(); \
           CV__TEST_CLEANUP \
        } \
-       catch (cvtest::SkipTestException& e) \
+       catch (const cvtest::SkipTestException& e) \
        { \
           printf("[     SKIP ] %s\n", e.what()); \
        } \
@@ -87,7 +85,7 @@ extern int testThreads;
           Body(); \
           CV__TEST_CLEANUP \
        } \
-       catch (cvtest::SkipTestException& e) \
+       catch (const cvtest::SkipTestException& e) \
        { \
           printf("[     SKIP ] %s\n", e.what()); \
        } \

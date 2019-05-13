@@ -45,18 +45,21 @@ namespace magazine {
     };
 
 } // namespace magazine
-
+#if !defined(GAPI_STANDALONE)
+using Mag = magazine::Class<cv::gapi::own::Mat, cv::UMat, cv::gapi::own::Scalar, cv::detail::VectorRef>;
+#else
 using Mag = magazine::Class<cv::gapi::own::Mat, cv::gapi::own::Scalar, cv::detail::VectorRef>;
+#endif
 
 namespace magazine
 {
-    void         bindInArg (Mag& mag, const RcDesc &rc, const GRunArg  &arg);
-    void         bindOutArg(Mag& mag, const RcDesc &rc, const GRunArgP &arg);
+    void         GAPI_EXPORTS bindInArg (Mag& mag, const RcDesc &rc, const GRunArg  &arg, bool is_umat = false);
+    void         GAPI_EXPORTS bindOutArg(Mag& mag, const RcDesc &rc, const GRunArgP &arg, bool is_umat = false);
 
     void         resetInternalData(Mag& mag, const Data &d);
     cv::GRunArg  getArg    (const Mag& mag, const RcDesc &ref);
-    cv::GRunArgP getObjPtr (      Mag& mag, const RcDesc &rc);
-    void         writeBack (const Mag& mag, const RcDesc &rc, GRunArgP &g_arg);
+    cv::GRunArgP getObjPtr (      Mag& mag, const RcDesc &rc, bool is_umat = false);
+    void         writeBack (const Mag& mag, const RcDesc &rc, GRunArgP &g_arg, bool is_umat = false);
 } // namespace magazine
 
 namespace detail
@@ -96,7 +99,10 @@ inline cv::util::optional<T> getCompileArg(const cv::GCompileArgs &args)
     return cv::util::optional<T>();
 }
 
-
+void createMat(const cv::GMatDesc desc, cv::gapi::own::Mat& mat);
+#if !defined(GAPI_STANDALONE)
+void createMat(const cv::GMatDesc desc, cv::Mat& mat);
+#endif
 
 }} // cv::gimpl
 

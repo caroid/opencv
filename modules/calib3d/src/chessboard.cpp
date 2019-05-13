@@ -164,7 +164,9 @@ cv::Mat findHomography1D(cv::InputArray _src,cv::InputArray _dst)
     Mat H = dst_T.inv()*Mat(H_, false)*src_T;
 
     // enforce frobeniusnorm of one
-    double scale = 1.0/cv::norm(H);
+    double scale = cv::norm(H);
+    CV_Assert(fabs(scale) > DBL_EPSILON);
+    scale = 1.0 / scale;
     return H*scale;
 }
 void polyfit(const Mat& src_x, const Mat& src_y, Mat& dst, int order)
@@ -1165,7 +1167,7 @@ std::vector<cv::Point2f> Chessboard::Board::getCellCenters()const
     int icols = int(colCount());
     int irows = int(rowCount());
     if(icols < 3 || irows < 3)
-        throw std::runtime_error("getCellCenters: Chessboard must be at least consist of 3 rows and cols to calcualte the cell centers");
+        throw std::runtime_error("getCellCenters: Chessboard must be at least consist of 3 rows and cols to calculate the cell centers");
 
     std::vector<cv::Point2f> points;
     cv::Matx33d H(estimateHomography(DUMMY_FIELD_SIZE));
@@ -1624,7 +1626,7 @@ bool Chessboard::Board::init(const std::vector<cv::Point2f> points)
     rows = 3;
     cols = 3;
 
-    // set inital cell colors
+    // set initial cell colors
     Point2f pt1 = *(cells[0]->top_right)-*(cells[0]->bottom_left);
     pt1 /= cv::norm(pt1);
     cv::Point2f pt2(cos(white_angle),-sin(white_angle));
@@ -2921,7 +2923,7 @@ Chessboard::BState Chessboard::generateBoards(cv::flann::Index &flann_index,cons
             points.push_back(*iter1);
     }
 
-    // genreate pairs those connection goes through the center
+    // generate pairs those connection goes through the center
     std::vector<std::pair<cv::KeyPoint,cv::KeyPoint> > pairs;
     iter1 = points.begin();
     for(;iter1 != points.end();++iter1)
@@ -3207,7 +3209,7 @@ bool findChessboardCornersSB(cv::InputArray image_, cv::Size pattern_size,
         flags ^= CALIB_CB_ACCURACY;
     }
     if(flags)
-        CV_Error(Error::StsOutOfRange, cv::format("Invalid remaing flags %d", (int)flags));
+        CV_Error(Error::StsOutOfRange, cv::format("Invalid remaining flags %d", (int)flags));
 
     std::vector<cv::KeyPoint> corners;
     details::Chessboard board(para);

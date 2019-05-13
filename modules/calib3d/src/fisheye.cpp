@@ -104,8 +104,9 @@ void cv::fisheye::projectPoints(InputArray objectPoints, OutputArray imagePoints
 
     Vec4d k = _D.depth() == CV_32F ? (Vec4d)*_D.getMat().ptr<Vec4f>(): *_D.getMat().ptr<Vec4d>();
 
+    const bool isJacobianNeeded = jacobian.needed();
     JacobianRow *Jn = 0;
-    if (jacobian.needed())
+    if (isJacobianNeeded)
     {
         int nvars = 2 + 2 + 1 + 4 + 3 + 3; // f, c, alpha, k, om, T,
         jacobian.create(2*(int)n, nvars, CV_64F);
@@ -153,7 +154,7 @@ void cv::fisheye::projectPoints(InputArray objectPoints, OutputArray imagePoints
         else
             xpd[i] = final_point;
 
-        if (jacobian.needed())
+        if (isJacobianNeeded)
         {
             //Vec3d Xi = pdepth == CV_32F ? (Vec3d)Xf[i] : Xd[i];
             //Vec3d Y = aff*Xi;
@@ -534,7 +535,7 @@ void cv::fisheye::undistortImage(InputArray distorted, OutputArray undistorted,
 {
     CV_INSTRUMENT_REGION();
 
-    Size size = new_size.area() != 0 ? new_size : distorted.size();
+    Size size = !new_size.empty() ? new_size : distorted.size();
 
     cv::Mat map1, map2;
     fisheye::initUndistortRectifyMap(K, D, cv::Matx33d::eye(), Knew, size, CV_16SC2, map1, map2 );
@@ -601,7 +602,7 @@ void cv::fisheye::estimateNewCameraMatrixForUndistortRectify(InputArray K, Input
     new_f[1] /= aspect_ratio;
     new_c[1] /= aspect_ratio;
 
-    if (new_size.area() > 0)
+    if (!new_size.empty())
     {
         double rx = new_size.width /(double)image_size.width;
         double ry = new_size.height/(double)image_size.height;
